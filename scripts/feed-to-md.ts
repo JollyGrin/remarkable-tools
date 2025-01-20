@@ -30,6 +30,7 @@ async function fetchAndParseFeed() {
             .replace(/\n{3,}/g, '\n\n')  // Replace multiple newlines with double newlines
             .trim();
         
+        markdown += `\n\\pagebreak\n\n`;  // Add page break before each article
         markdown += `## ${title}\n`;
         markdown += `*Published on ${date}*\n\n`;
         markdown += `${mdContent}\n\n`;
