@@ -37,13 +37,6 @@
 		const fileSizeMB = file.size / (1024 * 1024);
 		addLog(`File size: ${fileSizeMB.toFixed(2)} MB`);
 
-		// Remarkable has a file size limit of 50MB
-		const MAX_FILE_SIZE_MB = 50;
-		if (fileSizeMB > MAX_FILE_SIZE_MB) {
-			addLog(`File too large! Maximum size is ${MAX_FILE_SIZE_MB}MB. Your file is ${fileSizeMB.toFixed(2)}MB`, 'error');
-			return;
-		}
-
 		addLog(`Starting upload of ${file.name} (${(file.size / 1024).toFixed(2)} KB)`);
 
 		// Get the correct content type based on file extension
@@ -63,15 +56,17 @@
 		};
 
 		const formData = new FormData();
-		formData.append('file', file, file.name);
+		// Match the exact format from the working shell script
+		formData.append('file', file, `filename=${file.name};type=${getContentType(file.name)}`);
 
 		try {
 			const response = await fetch('/remarkable/upload', {
 				method: 'POST',
 				headers: {
+					'Origin': 'http://10.11.99.1',
 					'Accept': '*/*',
-					'Connection': 'keep-alive',
-					'Content-Type': getContentType(file.name)
+					'Referer': 'http://10.11.99.1/',
+					'Connection': 'keep-alive'
 				},
 				body: formData
 			});
@@ -81,8 +76,12 @@
 				await fetchFiles(); // Refresh file list
 			} else {
 				let errorMessage = await response.text();
-				if (response.status === 413) {
-					errorMessage = `File too large! The Remarkable web interface has a file size limit. Try using the USB cable or the official app for larger files.`;
+				try {
+					// Try to parse error as JSON
+					const jsonError = JSON.parse(errorMessage);
+					errorMessage = jsonError.error || errorMessage;
+				} catch {
+					// If not JSON, use as is
 				}
 				addLog(`Upload failed: ${errorMessage}`, 'error');
 			}
