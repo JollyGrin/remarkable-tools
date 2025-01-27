@@ -34,14 +34,45 @@
 		if (!input.files?.length) return;
 
 		const file = input.files[0];
+		const fileSizeMB = file.size / (1024 * 1024);
+		addLog(`File size: ${fileSizeMB.toFixed(2)} MB`);
+
+		// Remarkable has a file size limit of 50MB
+		const MAX_FILE_SIZE_MB = 50;
+		if (fileSizeMB > MAX_FILE_SIZE_MB) {
+			addLog(`File too large! Maximum size is ${MAX_FILE_SIZE_MB}MB. Your file is ${fileSizeMB.toFixed(2)}MB`, 'error');
+			return;
+		}
+
 		addLog(`Starting upload of ${file.name} (${(file.size / 1024).toFixed(2)} KB)`);
 
+		// Get the correct content type based on file extension
+		const getContentType = (filename: string) => {
+			const ext = filename.toLowerCase().split('.').pop();
+			switch (ext) {
+				case 'pdf':
+					return 'application/pdf';
+				case 'epub':
+					return 'application/epub+zip';
+				case 'md':
+				case 'markdown':
+					return 'text/markdown';
+				default:
+					return 'application/octet-stream';
+			}
+		};
+
 		const formData = new FormData();
-		formData.append('file', file);
+		formData.append('file', file, file.name);
 
 		try {
 			const response = await fetch('/remarkable/upload', {
 				method: 'POST',
+				headers: {
+					'Accept': '*/*',
+					'Connection': 'keep-alive',
+					'Content-Type': getContentType(file.name)
+				},
 				body: formData
 			});
 
@@ -49,8 +80,11 @@
 				addLog(`Successfully uploaded ${file.name}`, 'success');
 				await fetchFiles(); // Refresh file list
 			} else {
-				const errorText = await response.text();
-				addLog(`Upload failed: ${errorText}`, 'error');
+				let errorMessage = await response.text();
+				if (response.status === 413) {
+					errorMessage = `File too large! The Remarkable web interface has a file size limit. Try using the USB cable or the official app for larger files.`;
+				}
+				addLog(`Upload failed: ${errorMessage}`, 'error');
 			}
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : 'Unknown error';
