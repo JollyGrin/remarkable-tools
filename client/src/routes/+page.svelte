@@ -29,6 +29,47 @@
 		}
 	}
 
+	async function handleDownload(file: { ID: string; VissibleName: string; Type: string }) {
+		addLog(`Downloading ${file.VissibleName}...`);
+		
+		try {
+			// For notebooks use rmdoc, for other files use placeholder (PDF)
+			const endpoint = file.VissibleName.toLowerCase().endsWith('.pdf') || 
+							file.VissibleName.toLowerCase().endsWith('.epub')
+				? 'placeholder'
+				: 'rmdoc';
+
+			const response = await fetch(`/remarkable/download/${file.ID}/${endpoint}`, {
+				headers: {
+					'Origin': 'http://10.11.99.1',
+					'Accept': '*/*',
+					'Referer': 'http://10.11.99.1/',
+					'Connection': 'keep-alive'
+				}
+			});
+
+			if (!response.ok) {
+				throw new Error(`HTTP error! status: ${response.status}`);
+			}
+
+			// Get the blob and create a download link
+			const blob = await response.blob();
+			const url = window.URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = `${file.VissibleName}${endpoint === 'rmdoc' ? '.rmdoc' : ''}`;
+			document.body.appendChild(a);
+			a.click();
+			window.URL.revokeObjectURL(url);
+			document.body.removeChild(a);
+
+			addLog(`Successfully downloaded ${file.VissibleName}`, 'success');
+		} catch (error) {
+			const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+			addLog(`Error downloading ${file.VissibleName}: ${errorMsg}`, 'error');
+		}
+	}
+
 	async function handleFileUpload(event: Event) {
 		const input = event.target as HTMLInputElement;
 		if (!input.files?.length) return;
@@ -97,20 +138,35 @@
 	});
 </script>
 
+{#snippet fileActions(file)}
+	<div class="file-actions">
+		<span class="type">{file.Type}</span>
+		<button 
+			class="download-button" 
+			on:click={() => handleDownload(file)}
+			title="Download file"
+		>
+			↓
+		</button>
+	</div>
+{/snippet}
+
+{#snippet fileItem(file)}
+	<div class="file">
+		<span class="file-name">{file.VissibleName}</span>
+		{@render fileActions(file)}
+	</div>
+{/snippet}
+
 {#snippet fileList(files)}
 	<div class="files">
 		{#each files as file}
-			<div class="file">
-				<span>{file.VissibleName}</span>
-				<span class="type">{file.Type}</span>
-			</div>
+			{@render fileItem(file)}
 		{/each}
 	</div>
 {/snippet}
 
-<main>
-	<h1>Remarkable Tools Dashboard</h1>
-
+{#snippet uploadButton()}
 	<div class="upload-section">
 		<label for="file-upload" class="upload-button">
 			Upload File
@@ -123,13 +179,9 @@
 			/>
 		</label>
 	</div>
+{/snippet}
 
-	{#if isLoading}
-		<div class="loading">Loading...</div>
-	{:else}
-		{@render fileList(files)}
-	{/if}
-
+{#snippet consoleOutput(logs)}
 	<div class="console">
 		<h3>Console</h3>
 		<div class="console-content">
@@ -141,6 +193,20 @@
 			{/each}
 		</div>
 	</div>
+{/snippet}
+
+<main>
+	<h1>Remarkable Tools Dashboard</h1>
+
+	{@render uploadButton()}
+
+	{#if isLoading}
+		<div class="loading">Loading...</div>
+	{:else}
+		{@render fileList(files)}
+	{/if}
+
+	{@render consoleOutput(logs)}
 </main>
 
 <style>
@@ -191,9 +257,41 @@
 		align-items: center;
 	}
 
+	.file-name {
+		flex: 1;
+		margin-right: 1rem;
+	}
+
+	.file-actions {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+	}
+
 	.type {
 		color: #6c757d;
 		font-size: 0.875rem;
+	}
+
+	.download-button {
+		background: #28a745;
+		color: white;
+		border: none;
+		border-radius: 4px;
+		width: 24px;
+		height: 24px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		cursor: pointer;
+		font-size: 1.2rem;
+		line-height: 1;
+		padding: 0;
+		transition: background-color 0.2s;
+	}
+
+	.download-button:hover {
+		background: #218838;
 	}
 
 	.loading {
