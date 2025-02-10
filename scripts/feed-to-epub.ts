@@ -1,11 +1,39 @@
 import { XMLParser } from "fast-xml-parser";
 import { marked } from "marked";
-import { writeFileSync } from "fs";
+import { writeFileSync, existsSync, mkdirSync } from "fs";
 import { decode } from "html-entities";
 import { execSync } from "child_process";
+import { createInterface } from "readline";
+
+async function promptForSubstack(): Promise<string> {
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  return new Promise((resolve) => {
+    rl.question(
+      'Enter the Substack name (e.g., "graymirror" for graymirror.substack.com): ',
+      (answer) => {
+        rl.close();
+        resolve(answer.trim());
+      },
+    );
+  });
+}
 
 async function fetchAndCreateEpub() {
-  const response = await fetch("https://graymirror.substack.com/feed");
+  // Get substack name from command line or prompt
+  let substackName = process.argv[2];
+  if (!substackName) {
+    substackName = await promptForSubstack();
+  }
+
+  const response = await fetch(`https://${substackName}.substack.com/feed`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch feed: ${response.statusText}`);
+  }
+
   const xmlData = await response.text();
 
   const parser = new XMLParser({
@@ -16,12 +44,12 @@ async function fetchAndCreateEpub() {
   const feed = parser.parse(xmlData);
   const items = feed.rss.channel.item;
 
-  // Take only the first 20 items
+  // Take only the first 50 items
   const recentItems = items.slice(0, 50);
 
-  let markdown = "# Gray Mirror Articles\n\n";
+  let markdown = `# ${substackName} Articles\n\n`;
 
-  for (const item of recentItems) {
+  for (const item of items) {
     const title = decode(item.title);
     const date = new Date(item.pubDate).toISOString().split("T")[0];
     const content = item["content:encoded"] || item.description || "";
@@ -37,17 +65,26 @@ async function fetchAndCreateEpub() {
     markdown += `${mdContent}\n\n`;
   }
 
+  // Ensure export directory exists
+  const exportDir = "./export";
+  if (!existsSync(exportDir)) {
+    mkdirSync(exportDir);
+  }
+
   // Write the markdown file
-  writeFileSync("gray-mirror-articles.md", markdown);
-  console.log("Successfully created gray-mirror-articles.md");
+  const mdFilename = `${exportDir}/${substackName}-articles.md`;
+  const epubFilename = `${exportDir}/${substackName}-articles.epub`;
+
+  writeFileSync(mdFilename, markdown);
+  console.log(`Successfully created ${mdFilename}`);
 
   // Convert to EPUB using pandoc
   try {
     execSync(
-      "pandoc gray-mirror-articles.md -o gray-mirror-articles.epub --epub-metadata=epub-metadata.yaml --toc --toc-depth=1",
+      `pandoc ${mdFilename} -o ${epubFilename} --epub-metadata=epub-metadata.yaml --toc --toc-depth=2`,
       { stdio: "inherit" },
     );
-    console.log("Successfully created gray-mirror-articles.epub");
+    console.log(`Successfully created ${epubFilename}`);
   } catch (error) {
     console.error("Error creating EPUB:", error);
   }
