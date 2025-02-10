@@ -44,26 +44,49 @@ async function fetchAndCreateEpub() {
   const feed = parser.parse(xmlData);
   const items = feed.rss.channel.item;
 
+  console.log(`Found ${items.length} articles in the feed`);
+
   // Take only the first 50 items
   const recentItems = items.slice(0, 50);
 
   let markdown = `# ${substackName} Articles\n\n`;
+  let processedCount = 0;
 
-  for (const item of items) {
+  for (const item of recentItems) {
     const title = decode(item.title);
     const date = new Date(item.pubDate).toISOString().split("T")[0];
     const content = item["content:encoded"] || item.description || "";
 
-    // Convert HTML content to Markdown and clean up any extra whitespace
+    // First clean up the HTML content
+    const cleanHtml = content
+      .replace(/<br\s*\/?>/gi, "\n") // Convert br tags to newlines
+      .replace(/<div[^>]*>/gi, "") // Remove opening div tags
+      .replace(/<\/div>/gi, "\n") // Convert closing div tags to newlines
+      .replace(/<p[^>]*>/gi, "") // Remove opening p tags
+      .replace(/<\/p>/gi, "\n\n") // Convert closing p tags to double newlines
+      .replace(/<figure[^>]*>.*?<\/figure>/gi, "") // Remove figure elements
+      .replace(/<iframe[^>]*>.*?<\/iframe>/gi, "") // Remove iframe elements
+      .replace(/<script[^>]*>.*?<\/script>/gi, "") // Remove script elements
+      .replace(/<style[^>]*>.*?<\/style>/gi, "") // Remove style elements
+      .replace(/<[^>]*>/g, ""); // Remove any remaining HTML tags
+
+    // Convert to Markdown and clean up
     const mdContent = marked
-      .parse(content)
+      .parse(cleanHtml, {
+        mangle: false,
+        headerIds: false,
+        sanitize: true
+      })
       .replace(/\n{3,}/g, "\n\n") // Replace multiple newlines with double newlines
       .trim();
 
-    markdown += `# ${title}\n\n`; // Using h1 for chapter-level breaks in EPUB
+    markdown += `## ${title}\n\n`; // Using h2 for better EPUB chapter organization
     markdown += `*Published on ${date}*\n\n`;
-    markdown += `${mdContent}\n\n`;
+    markdown += `${mdContent}\n\n---\n\n`; // Add separator between articles
+    processedCount++;
   }
+
+  console.log(`Processed ${processedCount} articles into markdown`);
 
   // Ensure export directory exists
   const exportDir = "./export";
