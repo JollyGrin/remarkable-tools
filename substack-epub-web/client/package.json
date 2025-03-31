@@ -6,7 +6,7 @@
 	"scripts": {
 		"dev": "bun vite dev",
 		"build": "bun vite build",
-		"preview": "bun vite preview",
+		"preview": "bun vite preview --host 0.0.0.0 --port $PORT",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
