@@ -51,7 +51,7 @@ export async function uploadFileToUploadThing(
     }
 
     // Check if we have an API key and log it safely (only first few chars)
-    const apiKey = process.env.UPLOADTHING_TOKEN;
+    const apiKey = process.env.UPLOADTHING_SECRET;
     if (!apiKey) {
       throw new Error("UPLOADTHING_TOKEN not set in environment variables");
     }
@@ -63,47 +63,78 @@ export async function uploadFileToUploadThing(
 
     // Read the file
     const fileBuffer = fs.readFileSync(filePath);
+    const fileSize = fs.statSync(filePath).size;
+    const fileType = "application/epub+zip";
 
-    // Create FormData for the upload (Node.js environment-compatible)
-    const formData = new FormData();
+    console.log("Uploading file to UploadThing REST API...");
 
-    // Create a Blob from the file buffer
-    const blob = new Blob([fileBuffer], { type: "application/epub+zip" });
+    // Create the payload according to the API docs
+    const payload = JSON.stringify({
+      files: [
+        {
+          name: fileName,
+          size: fileSize,
+          type: fileType,
+          customId: null,
+        },
+      ],
+      acl: "public-read",
+      metadata: {
+        source: "server-side-upload",
+        createdAt: new Date().toISOString(),
+      },
+      contentDisposition: "inline",
+    });
 
-    // Create a File object from the Blob
-    const file = new File([blob], fileName, { type: "application/epub+zip" });
-
-    // Append the file to the form data
-    formData.append("file", file);
-
-    console.log("Uploading file to UploadThing...");
-
-    // Make the direct API request to UploadThing with precise headers
-    const response = await fetch("https://uploadthing.com/api/uploadFiles", {
+    // Make the API request according to the REST API docs
+    const response = await fetch("https://api.uploadthing.com/v6/uploadFiles", {
       method: "POST",
       headers: {
-        "X-UploadThing-API-Key": apiKey,
+        "Content-Type": "application/json",
+        "X-Uploadthing-Api-Key": apiKey, // Correct case: lowercase 't' in 'thing'
         Accept: "application/json",
       },
-      body: formData,
+      body: payload,
     });
 
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `Upload failed: ${response.status} ${response.statusText} - ${errorText}. API KEY: ${process.env.UPLOADTHING_TOKEN}`,
+        `Upload failed: ${response.status} ${response.statusText} - ${errorText}`,
       );
     }
 
     const result = await response.json();
     console.log("UploadThing response:", JSON.stringify(result, null, 2));
 
+    // Get the presigned URL for uploading the file content
+    const presignedUrl = result.data.presignedUrl;
+    console.log("Got presigned URL for upload:", presignedUrl);
+
+    // Upload the actual file content to the presigned URL
+    const uploadResponse = await fetch(presignedUrl, {
+      method: "PUT",
+      headers: {
+        "Content-Type": fileType,
+        "Content-Length": fileSize.toString(),
+      },
+      body: fileBuffer,
+    });
+
+    if (!uploadResponse.ok) {
+      throw new Error(
+        `Failed to upload file content: ${uploadResponse.status} ${uploadResponse.statusText}`,
+      );
+    }
+
+    console.log("File content uploaded successfully");
+
     // Format the response to match what our application expects
     return {
-      fileUrl: result.data[0].url,
-      fileKey: result.data[0].key,
+      fileUrl: result.data.url,
+      fileKey: result.data.key,
       fileName: fileName,
-      fileSize: fs.statSync(filePath).size,
+      fileSize: fileSize,
       timestamp: new Date().toISOString(),
     };
   } catch (error) {
