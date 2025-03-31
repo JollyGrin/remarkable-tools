@@ -86,7 +86,8 @@ export async function uploadFileToUploadThing(
       contentDisposition: "inline",
     });
 
-    // Make the API request according to the REST API docs
+    // STEP 1: Initialize the upload with UploadThing API
+    console.log("Step 1: Initializing upload with UploadThing...");
     const response = await fetch("https://api.uploadthing.com/v6/uploadFiles", {
       method: "POST",
       headers: {
@@ -100,20 +101,57 @@ export async function uploadFileToUploadThing(
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(
-        `Upload failed: ${response.status} ${response.statusText} - ${errorText}`,
+        `Upload initialization failed: ${response.status} ${response.statusText} - ${errorText}`,
       );
     }
 
     const result = await response.json();
-    console.log("UploadThing response:", JSON.stringify(result, null, 2));
+    console.log("UploadThing initialization response:", JSON.stringify(result, null, 2));
 
     // The file information is in result.data[0] since it's an array
-    if (!result.data || !result.data[0] || !result.data[0].fileUrl) {
+    if (!result.data || !result.data[0]) {
       throw new Error("Invalid response format from UploadThing API");
     }
     
     const fileData = result.data[0];
-    console.log("File upload successful, URL:", fileData.fileUrl);
+    
+    // STEP 2: Upload the actual file content to S3 using the presigned URL and form fields
+    console.log("Step 2: Uploading file content to S3...");
+    
+    if (!fileData.url || !fileData.fields) {
+      throw new Error("Missing S3 upload information in UploadThing response");
+    }
+    
+    // Create a form for the S3 upload
+    const formData = new FormData();
+    
+    // Add all the fields from the response to the form data
+    Object.entries(fileData.fields).forEach(([key, value]) => {
+      if (typeof value === 'string') {
+        formData.append(key, value);
+      } else {
+        console.warn(`Skipping field ${key} as it's not a string`);
+      }
+    });
+    
+    // Add the file as the last field
+    formData.append("file", new Blob([fileBuffer], { type: fileType }));
+    
+    // Upload to S3
+    console.log(`Uploading to S3 URL: ${fileData.url}`);
+    const s3Response = await fetch(fileData.url, {
+      method: "POST",
+      body: formData,
+    });
+    
+    if (!s3Response.ok) {
+      const s3ErrorText = await s3Response.text();
+      throw new Error(
+        `S3 upload failed: ${s3Response.status} ${s3Response.statusText} - ${s3ErrorText}`,
+      );
+    }
+    
+    console.log("File content uploaded successfully to S3");
     
     // Format the response to match what our application expects
     return {
