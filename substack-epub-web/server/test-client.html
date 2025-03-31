@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Substack to EPUB Converter - Test Client</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .card {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+            margin-bottom: 15px;
+        }
+        button {
+            background-color: #4a88eb;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            font-size: 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #3a6fc7;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .download-link {
+            display: inline-block;
+            margin-top: 15px;
+            padding: 10px 15px;
+            background-color: #28a745;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+        }
+        .download-link:hover {
+            background-color: #218838;
+        }
+    </style>
+</head>
+<body>
+    <h1>Substack to EPUB Converter</h1>
+    
+    <div class="card">
+        <label for="substackName">Enter Substack Name:</label>
+        <input type="text" id="substackName" placeholder="e.g., graymirror for graymirror.substack.com">
+        <button id="convertBtn">Convert to EPUB</button>
+        
+        <div id="status" class="status" style="display: none;"></div>
+        <div id="downloadContainer" style="display: none;">
+            <a href="#" id="downloadLink" class="download-link">Download EPUB</a>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const convertBtn = document.getElementById('convertBtn');
+            const substackNameInput = document.getElementById('substackName');
+            const statusDiv = document.getElementById('status');
+            const downloadContainer = document.getElementById('downloadContainer');
+            const downloadLink = document.getElementById('downloadLink');
+            
+            // API endpoint
+            const API_URL = 'http://localhost:3001/api/convert';
+            
+            convertBtn.addEventListener('click', async () => {
+                const substackName = substackNameInput.value.trim();
+                
+                if (!substackName) {
+                    showStatus('Please enter a Substack name', 'error');
+                    return;
+                }
+                
+                // Show loading state
+                convertBtn.disabled = true;
+                convertBtn.innerHTML = '<span class="spinner"></span>Converting...';
+                downloadContainer.style.display = 'none';
+                showStatus('Converting feed to EPUB...', '');
+                
+                try {
+                    const response = await fetch(API_URL, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ substackName })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (response.ok && data.success) {
+                        showStatus(`Successfully converted ${substackName} to EPUB!`, 'success');
+                        
+                        // Set the download link
+                        downloadLink.href = `http://localhost:3001${data.downloadUrl}`;
+                        downloadLink.download = data.fileName;
+                        downloadContainer.style.display = 'block';
+                    } else {
+                        showStatus(`Error: ${data.error || 'Something went wrong'}`, 'error');
+                    }
+                } catch (error) {
+                    showStatus(`Error: ${error.message || 'Failed to connect to server'}`, 'error');
+                } finally {
+                    // Reset button state
+                    convertBtn.disabled = false;
+                    convertBtn.textContent = 'Convert to EPUB';
+                }
+            });
+            
+            function showStatus(message, type) {
+                statusDiv.textContent = message;
+                statusDiv.className = 'status';
+                if (type) {
+                    statusDiv.classList.add(type);
+                }
+                statusDiv.style.display = 'block';
+            }
+        });
+    </script>
+</body>
+</html>
