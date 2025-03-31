@@ -107,32 +107,18 @@ export async function uploadFileToUploadThing(
     const result = await response.json();
     console.log("UploadThing response:", JSON.stringify(result, null, 2));
 
-    // Get the presigned URL for uploading the file content
-    const presignedUrl = result.data.presignedUrl;
-    console.log("Got presigned URL for upload:", presignedUrl);
-
-    // Upload the actual file content to the presigned URL
-    const uploadResponse = await fetch(presignedUrl, {
-      method: "PUT",
-      headers: {
-        "Content-Type": fileType,
-        "Content-Length": fileSize.toString(),
-      },
-      body: fileBuffer,
-    });
-
-    if (!uploadResponse.ok) {
-      throw new Error(
-        `Failed to upload file content: ${uploadResponse.status} ${uploadResponse.statusText}`,
-      );
+    // The file information is in result.data[0] since it's an array
+    if (!result.data || !result.data[0] || !result.data[0].fileUrl) {
+      throw new Error("Invalid response format from UploadThing API");
     }
-
-    console.log("File content uploaded successfully");
-
+    
+    const fileData = result.data[0];
+    console.log("File upload successful, URL:", fileData.fileUrl);
+    
     // Format the response to match what our application expects
     return {
-      fileUrl: result.data.url,
-      fileKey: result.data.key,
+      fileUrl: fileData.fileUrl,
+      fileKey: fileData.key, 
       fileName: fileName,
       fileSize: fileSize,
       timestamp: new Date().toISOString(),
