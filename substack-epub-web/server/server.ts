@@ -1,9 +1,18 @@
+// Load environment variables
+import 'dotenv/config';
+
 import express from 'express';
 import cors from 'cors';
 import { createEpub } from './epub-converter.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { uploadFileToUploadThing } from './uploadthing-config.js';
+
+// Check if UploadThing token exists
+if (!process.env.UPLOADTHING_TOKEN) {
+  console.warn('WARNING: UPLOADTHING_TOKEN environment variable not found. UploadThing integration will not work.');
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -41,21 +50,40 @@ app.post('/api/convert', async (req, res) => {
     // Convert feed to EPUB
     const { mdFilePath, epubFilePath } = await createEpub(substackName, outputDir);
     
-    // Construct download URL
+    // Construct local download URL (fallback)
     const epubFileName = path.basename(epubFilePath);
-    const downloadUrl = `/output/${epubFileName}`;
+    const localDownloadUrl = `/output/${epubFileName}`;
+    
+    // Try to upload to UploadThing if token exists
+    let uploadResult = null;
+    if (process.env.UPLOADTHING_TOKEN) {
+      try {
+        console.log('Uploading EPUB file to UploadThing...');
+        uploadResult = await uploadFileToUploadThing(epubFilePath, epubFileName);
+        console.log('Upload successful:', uploadResult);
+      } catch (uploadError) {
+        console.error('Error uploading to UploadThing:', uploadError);
+        console.log('Falling back to local file serving');
+      }
+    }
     
     res.json({ 
       success: true, 
       message: 'Conversion successful',
-      downloadUrl,
-      fileName: epubFileName
+      fileName: epubFileName,
+      // If upload was successful, return the UploadThing URL, otherwise fallback to local URL
+      downloadUrl: uploadResult?.fileUrl || localDownloadUrl,
+      // Include both URLs for flexibility
+      uploadThingUrl: uploadResult?.fileUrl || null,
+      localDownloadUrl,
+      // Include additional metadata from UploadThing if available
+      uploadMetadata: uploadResult || null
     });
   } catch (error) {
     console.error('Error processing request:', error);
     res.status(500).json({ 
       error: 'Failed to convert feed to EPUB', 
-      details: error.message 
+      details: error instanceof Error ? error.message : String(error) 
     });
   }
 });

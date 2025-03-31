@@ -9,6 +9,7 @@ services:
       - "3001:3001"
     volumes:
       - ./server/output:/app/output
+      - ./server/.env:/app/.env
     restart: unless-stopped
     environment:
       - PORT=3001
