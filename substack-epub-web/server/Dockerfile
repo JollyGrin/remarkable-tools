@@ -7,10 +7,10 @@ RUN apt-get update && apt-get install -y pandoc
 WORKDIR /app
 
 # Copy package.json and lock files
-COPY package.json bun.lockb* ./
+COPY package.json ./
 
 # Install dependencies
-RUN bun install --frozen-lockfile
+RUN bun install
 
 # Copy all other files
 COPY . .
