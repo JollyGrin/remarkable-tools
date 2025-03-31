@@ -1,19 +1,59 @@
-<script>
+<script lang="ts">
+	// Environment variables with fallback for production
 	import { env } from '$env/dynamic/public';
+	const API_URL = env.PUBLIC_API_URL || 'http://localhost:3001';
+
+	// Define response type to match API
+	interface ConversionResponse {
+		success: boolean;
+		message: string;
+		fileName: string;
+		downloadUrl: string;
+		uploadMetadata: {
+			fileUrl: string;
+			fileKey: string;
+			fileName: string;
+			fileSize: number;
+			timestamp: string;
+		};
+	}
 
 	let substackName = '';
 	let isLoading = false;
-	let error = null;
+	let error: string | null = null;
+	let conversionResult: ConversionResponse | null = null;
 
-	const API_URL = env.PUBLIC_API_URL ?? 'http://localhost:3001';
+	async function handleSubmit(): Promise<void> {
+		if (!substackName) return;
 
-	function handleSubmit() {
-		// We'll implement this functionality later
 		isLoading = true;
-		// For now, just disable loading after 1 second
-		setTimeout(() => {
+		error = null;
+		conversionResult = null;
+
+		try {
+			const response = await fetch(`${API_URL}/api/convert`, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({ substackName })
+			});
+
+			const data = await response.json();
+
+			if (!response.ok) {
+				throw new Error(data.error || data.details || 'Failed to convert Substack to EPUB');
+			}
+
+			conversionResult = data as ConversionResponse;
+			console.log('Conversion successful:', data);
+		} catch (err) {
+			console.error('Error converting Substack to EPUB:', err);
+			error =
+				err instanceof Error ? err.message : 'An unexpected error occurred. Please try again.';
+		} finally {
 			isLoading = false;
-		}, 1000);
+		}
 	}
 </script>
 
@@ -41,6 +81,7 @@
 						placeholder="substackname"
 						aria-label="Substack username"
 						required
+						disabled={isLoading}
 					/>
 					<div class="input-suffix">.substack.com</div>
 				</div>
@@ -57,6 +98,28 @@
 			{#if error}
 				<div class="error-message">
 					<p>{error}</p>
+				</div>
+			{/if}
+
+			{#if conversionResult}
+				<div class="success-message">
+					<h3>Your EPUB is Ready!</h3>
+					<p>Click the button below to download your EPUB file.</p>
+					<div class="file-info">
+						<span class="file-name">{conversionResult.fileName}</span>
+						<span class="file-size"
+							>{(conversionResult.uploadMetadata?.fileSize / 1024).toFixed(1)} KB</span
+						>
+					</div>
+					<a
+						href={conversionResult.downloadUrl}
+						class="btn-download"
+						download={conversionResult.fileName}
+						target="_blank"
+						rel="noopener noreferrer"
+					>
+						Download EPUB
+					</a>
 				</div>
 			{/if}
 		</div>
@@ -173,6 +236,11 @@
 		outline: none;
 	}
 
+	input:disabled {
+		background-color: #f9fafb;
+		cursor: not-allowed;
+	}
+
 	.btn-primary {
 		background-color: #1d4ed8;
 		color: white;
@@ -196,11 +264,64 @@
 	}
 
 	.error-message {
-		margin-top: 1rem;
-		padding: 0.75rem;
+		margin-top: 1.5rem;
+		padding: 1rem;
 		background-color: #fee2e2;
 		border-radius: 8px;
 		color: #b91c1c;
+	}
+
+	.success-message {
+		margin-top: 1.5rem;
+		padding: 1.5rem;
+		background-color: #ecfdf5;
+		border-radius: 8px;
+		color: #065f46;
+		text-align: center;
+	}
+
+	.success-message h3 {
+		color: #065f46;
+		margin-top: 0;
+		margin-bottom: 0.5rem;
+	}
+
+	.file-info {
+		background-color: rgba(6, 95, 70, 0.1);
+		padding: 0.75rem;
+		border-radius: 6px;
+		margin: 1rem 0;
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+	}
+
+	.file-name {
+		font-weight: 600;
+		word-break: break-all;
+	}
+
+	.file-size {
+		color: #6b7280;
+		font-size: 0.875rem;
+	}
+
+	.btn-download {
+		display: inline-block;
+		background-color: #059669;
+		color: white;
+		border: none;
+		border-radius: 8px;
+		padding: 0.75rem 2rem;
+		font-size: 1rem;
+		cursor: pointer;
+		font-weight: 600;
+		text-decoration: none;
+		transition: background-color 0.2s;
+	}
+
+	.btn-download:hover {
+		background-color: #047857;
 	}
 
 	.features {
