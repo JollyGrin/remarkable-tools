@@ -145,6 +145,10 @@
 		</div>
 	</div>
 
+	<div class="grid place-items-center">
+		<video src="/demo.mp4" muted autoplay></video>
+	</div>
+
 	<footer>
 		<p>
 			Built with ♥ by <a href="https://github.com/JollyGrin/remarkable-tools" target="_blank"
