@@ -4,14 +4,15 @@
 	"version": "0.0.1",
 	"type": "module",
 	"scripts": {
-		"dev": "vite dev",
-		"build": "vite build",
-		"preview": "vite preview",
+		"dev": "bun vite dev",
+		"build": "bun vite build",
+		"preview": "bun vite preview",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"format": "prettier --write .",
-		"lint": "prettier --check . && eslint ."
+		"lint": "prettier --check . && eslint .",
+		"start": "bun run server.js"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^1.2.5",
@@ -33,5 +34,12 @@
 		"typescript": "^5.0.0",
 		"typescript-eslint": "^8.20.0",
 		"vite": "^6.0.0"
+	},
+	"dependencies": {
+		"sirv": "^2.0.4"
+	},
+	"engines": {
+		"node": ">=18.0.0",
+		"bun": ">=1.0.0"
 	}
 }
