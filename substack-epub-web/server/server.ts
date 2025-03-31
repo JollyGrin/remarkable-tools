@@ -3,15 +3,15 @@ import 'dotenv/config';
 
 import express from 'express';
 import cors from 'cors';
-import { createEpub } from './epub-converter.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { uploadFileToUploadThing } from './uploadthing-config.js';
+import { uploadFileBufferToUploadThing } from './uploadthing-config.js';
+import { createEpubInMemory } from './in-memory-epub.js';
 
 // Check if UploadThing token exists
-if (!process.env.UPLOADTHING_TOKEN) {
-  console.warn('WARNING: UPLOADTHING_TOKEN environment variable not found. UploadThing integration will not work.');
+if (!process.env.UPLOADTHING_SECRET) {
+  console.warn('WARNING: UPLOADTHING_SECRET environment variable not found. UploadThing integration will not work.');
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -19,22 +19,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Create uploads and output directories if they don't exist
-const uploadsDir = path.join(__dirname, 'uploads');
-const outputDir = path.join(__dirname, 'output');
-
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
-if (!fs.existsSync(outputDir)) {
-  fs.mkdirSync(outputDir, { recursive: true });
-}
-
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use('/output', express.static(outputDir));
 
 // Routes
 app.post('/api/convert', async (req, res) => {
@@ -47,36 +34,36 @@ app.post('/api/convert', async (req, res) => {
 
     console.log(`Processing substack: ${substackName}`);
     
-    // Convert feed to EPUB
-    const { mdFilePath, epubFilePath } = await createEpub(substackName, outputDir);
+    // Generate EPUB in memory
+    const { epubBuffer, epubFileName } = await createEpubInMemory(substackName);
     
-    // Construct local download URL (fallback)
-    const epubFileName = path.basename(epubFilePath);
-    const localDownloadUrl = `/output/${epubFileName}`;
-    
-    // Try to upload to UploadThing if token exists
+    // Try to upload to UploadThing
     let uploadResult = null;
-    if (process.env.UPLOADTHING_TOKEN) {
+    if (process.env.UPLOADTHING_SECRET) {
       try {
         console.log('Uploading EPUB file to UploadThing...');
-        uploadResult = await uploadFileToUploadThing(epubFilePath, epubFileName);
+        uploadResult = await uploadFileBufferToUploadThing(epubBuffer, epubFileName);
         console.log('Upload successful:', uploadResult);
       } catch (uploadError) {
         console.error('Error uploading to UploadThing:', uploadError);
-        console.log('Falling back to local file serving');
+        console.log('No fallback available - upload failed');
+        return res.status(500).json({ 
+          error: 'Failed to upload EPUB to UploadThing',
+          details: uploadError instanceof Error ? uploadError.message : String(uploadError)
+        });
       }
+    } else {
+      return res.status(500).json({ 
+        error: 'UPLOADTHING_SECRET not configured', 
+        details: 'Server is not configured with UploadThing API key'
+      });
     }
     
     res.json({ 
       success: true, 
       message: 'Conversion successful',
       fileName: epubFileName,
-      // If upload was successful, return the UploadThing URL, otherwise fallback to local URL
-      downloadUrl: uploadResult?.fileUrl || localDownloadUrl,
-      // Include both URLs for flexibility
-      uploadThingUrl: uploadResult?.fileUrl || null,
-      localDownloadUrl,
-      // Include additional metadata from UploadThing if available
+      downloadUrl: uploadResult?.fileUrl,
       uploadMetadata: uploadResult || null
     });
   } catch (error) {
